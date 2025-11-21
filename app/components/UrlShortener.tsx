@@ -20,9 +20,23 @@ export default function UrlShortener() {
   const [editUrl, setEditUrl] = useState('');
   const [editShortCode, setEditShortCode] = useState('');
 
-  // Load URLs from localStorage on mount
+  // Load URLs from localStorage on mount and sync to backend
   useEffect(() => {
-    setSavedUrls(urlStorage.getAll());
+    const urls = urlStorage.getAll();
+    setSavedUrls(urls);
+
+    // Sync URLs to backend storage on mount
+    if (urls.length > 0) {
+      fetch('/api/sync-urls', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ urls }),
+      }).catch((err) => {
+        console.error('Error syncing URLs to backend:', err);
+      });
+    }
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -76,13 +90,36 @@ export default function UrlShortener() {
     }
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this URL?')) {
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this URL?')) {
+      return;
+    }
+
+    const urlToDelete = urlStorage.getById(id);
+    if (!urlToDelete) return;
+
+    try {
+      // Remove from backend storage
+      await fetch('/api/delete-shortcode', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ shortCode: urlToDelete.shortCode }),
+      });
+
+      // Remove from localStorage
       urlStorage.delete(id);
       setSavedUrls(urlStorage.getAll());
+      
       if (result && savedUrls.find((u) => u.id === id)) {
         setResult(null);
       }
+    } catch (err) {
+      console.error('Error deleting URL:', err);
+      // Still remove from localStorage even if backend fails
+      urlStorage.delete(id);
+      setSavedUrls(urlStorage.getAll());
     }
   };
 
@@ -105,9 +142,28 @@ export default function UrlShortener() {
     setError(null);
 
     try {
-      // If the original URL changed, we need to create a new short URL
       const existingUrl = urlStorage.getById(editingId);
-      if (!existingUrl) return;
+      if (!existingUrl) {
+        setError('URL not found');
+        return;
+      }
+
+      // Validate short code format if it changed
+      if (editShortCode !== existingUrl.shortCode) {
+        if (!/^[a-zA-Z0-9]+$/.test(editShortCode.trim())) {
+          setError('Short code can only contain letters and numbers');
+          setLoading(false);
+          return;
+        }
+
+        // Check if short code already exists in localStorage (excluding current URL)
+        const existingUrlWithCode = urlStorage.getByShortCode(editShortCode.trim());
+        if (existingUrlWithCode && existingUrlWithCode.id !== editingId) {
+          setError('This short code is already in use. Please choose a different one.');
+          setLoading(false);
+          return;
+        }
+      }
 
       let updatedData: Partial<SavedUrl> = {};
 
@@ -124,6 +180,7 @@ export default function UrlShortener() {
         const data = await response.json();
         if (!response.ok) {
           setError(data.error || 'Failed to update URL');
+          setLoading(false);
           return;
         }
 
@@ -133,13 +190,33 @@ export default function UrlShortener() {
           shortUrl: data.shortUrl,
         };
       } else if (editShortCode !== existingUrl.shortCode) {
-        // Only short code changed (custom short code)
-        // Note: In a real app, you'd need backend support for custom short codes
-        // For now, we'll just update the display
+        // Only short code changed - update both localStorage and backend
+        const trimmedCode = editShortCode.trim();
         const baseUrl = window.location.origin;
+
+        // Update backend storage via API
+        const updateResponse = await fetch('/api/update-shortcode', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            oldShortCode: existingUrl.shortCode,
+            newShortCode: trimmedCode,
+            originalUrl: existingUrl.originalUrl,
+          }),
+        });
+
+        const updateData = await updateResponse.json();
+        if (!updateResponse.ok) {
+          setError(updateData.error || 'Failed to update short code');
+          setLoading(false);
+          return;
+        }
+
         updatedData = {
-          shortCode: editShortCode,
-          shortUrl: `${baseUrl}/${editShortCode}`,
+          shortCode: trimmedCode,
+          shortUrl: `${baseUrl}/${trimmedCode}`,
         };
       }
 

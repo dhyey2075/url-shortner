@@ -33,6 +33,34 @@ class UrlStorage {
   hasUrl(originalUrl: string): boolean {
     return this.urlMap.has(originalUrl);
   }
+
+  // Update short code mapping
+  updateShortCode(oldShortCode: string, newShortCode: string, originalUrl: string): boolean {
+    if (this.codeMap.has(newShortCode) && oldShortCode !== newShortCode) {
+      return false; // New code already exists
+    }
+
+    // Remove old mapping
+    this.codeMap.delete(oldShortCode);
+    this.metadata.delete(oldShortCode);
+
+    // Add new mapping
+    this.codeMap.set(newShortCode, originalUrl);
+    this.urlMap.set(originalUrl, newShortCode);
+    this.metadata.set(newShortCode, { createdAt: new Date() });
+
+    return true;
+  }
+
+  // Remove a mapping by short code
+  removeByCode(shortCode: string): void {
+    const originalUrl = this.codeMap.get(shortCode);
+    if (originalUrl) {
+      this.codeMap.delete(shortCode);
+      this.urlMap.delete(originalUrl);
+      this.metadata.delete(shortCode);
+    }
+  }
 }
 
 // Export a singleton instance
