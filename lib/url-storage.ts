@@ -1,68 +1,126 @@
-// Shared in-memory storage for URL mappings
-// In production, replace this with a database (e.g., PostgreSQL, MongoDB, Redis)
+// URL mappings stored in Supabase (table: public."URL" or "url")
 
-interface UrlMapping {
-  shortCode: string;
-  originalUrl: string;
-  createdAt: Date;
+import { supabase } from '@/lib/supabase';
+
+const TABLE = 'URL';
+
+const PGRST002 = 'PGRST002';
+const RETRY_DELAY_MS = 2500;
+const MAX_TRIES = 3;
+
+/** Retry on PostgREST schema cache error (PGRST002). */
+async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
+  let lastErr: unknown;
+  for (let tryCount = 1; tryCount <= MAX_TRIES; tryCount++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      const code = (e as { code?: string })?.code;
+      if (code === PGRST002 && tryCount < MAX_TRIES) {
+        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastErr;
 }
 
 class UrlStorage {
-  private urlMap = new Map<string, string>(); // originalUrl -> shortCode
-  private codeMap = new Map<string, string>(); // shortCode -> originalUrl
-  private metadata = new Map<string, { createdAt: Date }>(); // shortCode -> metadata
-
-  set(originalUrl: string, shortCode: string): void {
-    this.urlMap.set(originalUrl, shortCode);
-    this.codeMap.set(shortCode, originalUrl);
-    this.metadata.set(shortCode, { createdAt: new Date() });
+  async set(originalUrl: string, shortCode: string): Promise<void> {
+    await withRetry(async () => {
+      const { error } = await supabase.from(TABLE).insert({
+        original_url: originalUrl,
+        shorten_url_code: shortCode,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+    });
   }
 
-  getByCode(shortCode: string): string | undefined {
-    return this.codeMap.get(shortCode);
+  async getByCode(shortCode: string): Promise<string | undefined> {
+    return withRetry(async () => {
+      const { data, error } = await supabase
+        .from(TABLE)
+        .select('original_url')
+        .eq('shorten_url_code', shortCode)
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data?.original_url ?? undefined;
+    });
   }
 
-  getByUrl(originalUrl: string): string | undefined {
-    return this.urlMap.get(originalUrl);
+  async getByUrl(originalUrl: string): Promise<string | undefined> {
+    return withRetry(async () => {
+      const { data, error } = await supabase
+        .from(TABLE)
+        .select('shorten_url_code')
+        .eq('original_url', originalUrl)
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data?.shorten_url_code ?? undefined;
+    });
   }
 
-  hasCode(shortCode: string): boolean {
-    return this.codeMap.has(shortCode);
+  async hasCode(shortCode: string): Promise<boolean> {
+    return withRetry(async () => {
+      const { count, error } = await supabase
+        .from(TABLE)
+        .select('id', { count: 'exact', head: true })
+        .eq('shorten_url_code', shortCode);
+      if (error) throw error;
+      return (count ?? 0) > 0;
+    });
   }
 
-  hasUrl(originalUrl: string): boolean {
-    return this.urlMap.has(originalUrl);
+  async hasUrl(originalUrl: string): Promise<boolean> {
+    return withRetry(async () => {
+      const { count, error } = await supabase
+        .from(TABLE)
+        .select('id', { count: 'exact', head: true })
+        .eq('original_url', originalUrl);
+      if (error) throw error;
+      return (count ?? 0) > 0;
+    });
   }
 
-  // Update short code mapping
-  updateShortCode(oldShortCode: string, newShortCode: string, originalUrl: string): boolean {
-    if (this.codeMap.has(newShortCode) && oldShortCode !== newShortCode) {
-      return false; // New code already exists
-    }
+  async updateShortCode(
+    oldShortCode: string,
+    newShortCode: string,
+    originalUrl: string
+  ): Promise<boolean> {
+    const exists = await this.hasCode(newShortCode);
+    if (exists && newShortCode !== oldShortCode) return false;
 
-    // Remove old mapping
-    this.codeMap.delete(oldShortCode);
-    this.metadata.delete(oldShortCode);
+    await withRetry(async () => {
+      const { error: deleteErr } = await supabase
+        .from(TABLE)
+        .delete()
+        .eq('shorten_url_code', oldShortCode);
+      if (deleteErr) throw deleteErr;
 
-    // Add new mapping
-    this.codeMap.set(newShortCode, originalUrl);
-    this.urlMap.set(originalUrl, newShortCode);
-    this.metadata.set(newShortCode, { createdAt: new Date() });
-
+      const { error: insertErr } = await supabase.from(TABLE).insert({
+        original_url: originalUrl,
+        shorten_url_code: newShortCode,
+        updated_at: new Date().toISOString(),
+      });
+      if (insertErr) throw insertErr;
+    });
     return true;
   }
 
-  // Remove a mapping by short code
-  removeByCode(shortCode: string): void {
-    const originalUrl = this.codeMap.get(shortCode);
-    if (originalUrl) {
-      this.codeMap.delete(shortCode);
-      this.urlMap.delete(originalUrl);
-      this.metadata.delete(shortCode);
-    }
+  async removeByCode(shortCode: string): Promise<void> {
+    await withRetry(async () => {
+      const { error } = await supabase
+        .from(TABLE)
+        .delete()
+        .eq('shorten_url_code', shortCode);
+      if (error) throw error;
+    });
   }
 }
 
-// Export a singleton instance
 export const urlStorage = new UrlStorage();
-

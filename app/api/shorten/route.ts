@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if URL already exists
-    const existingCode = urlStorage.getByUrl(fullUrl);
+    const existingCode = await urlStorage.getByUrl(fullUrl);
     if (existingCode) {
       return NextResponse.json({
         shortCode: existingCode,
@@ -60,10 +60,10 @@ export async function POST(request: NextRequest) {
     let shortCode: string;
     do {
       shortCode = generateShortCode();
-    } while (urlStorage.hasCode(shortCode));
+    } while (await urlStorage.hasCode(shortCode));
 
     // Store the mapping
-    urlStorage.set(fullUrl, shortCode);
+    await urlStorage.set(fullUrl, shortCode);
 
     return NextResponse.json({
       shortCode,

@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Remove from backend storage
-    urlStorage.removeByCode(shortCode);
+    await urlStorage.removeByCode(shortCode);
 
     return NextResponse.json({
       success: true,

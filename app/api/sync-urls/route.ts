@@ -17,8 +17,8 @@ export async function POST(request: NextRequest) {
     for (const url of urls) {
       if (url.originalUrl && url.shortCode) {
         // Only add if it doesn't already exist
-        if (!urlStorage.hasCode(url.shortCode)) {
-          urlStorage.set(url.originalUrl, url.shortCode);
+        if (!(await urlStorage.hasCode(url.shortCode))) {
+          await urlStorage.set(url.originalUrl, url.shortCode);
         }
       }
     }
@@ -28,7 +28,9 @@ export async function POST(request: NextRequest) {
       message: 'URLs synced successfully',
     });
   } catch (error) {
-    console.error('Error syncing URLs:', error);
+    const err = error as { message?: string; code?: string; details?: string };
+    const msg = err?.message ?? err?.code ?? (err?.details ?? String(error));
+    console.error('Error syncing URLs:', msg, error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

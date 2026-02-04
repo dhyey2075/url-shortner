@@ -168,7 +168,7 @@ export default function UrlShortener() {
       let updatedData: Partial<SavedUrl> = {};
 
       if (editUrl !== existingUrl.originalUrl) {
-        // URL changed, create new short URL
+        // URL changed, create new short URL and remove old one from DB
         const response = await fetch('/api/shorten', {
           method: 'POST',
           headers: {
@@ -183,6 +183,15 @@ export default function UrlShortener() {
           setLoading(false);
           return;
         }
+
+        // Remove old short code from DB so the old link stops working
+        await fetch('/api/delete-shortcode', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ shortCode: existingUrl.shortCode }),
+        }).catch(() => {});
 
         updatedData = {
           originalUrl: data.originalUrl,

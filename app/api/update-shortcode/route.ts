@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update the short code
-    const success = urlStorage.updateShortCode(oldShortCode, newShortCode, originalUrl);
+    const success = await urlStorage.updateShortCode(oldShortCode, newShortCode, originalUrl);
 
     if (!success) {
       return NextResponse.json(
