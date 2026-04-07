@@ -33,7 +33,7 @@ export const urlStorage = {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    urls.push(newUrl);
+    urls.unshift(newUrl);
     this.setAll(urls);
     return newUrl;
   },
