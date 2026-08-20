@@ -1,4 +1,27 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+This is a [Next.js](https://nextjs.org) URL shortener backed by Supabase.
+
+## Auth flow
+
+- Signup requires unique `username`, `email`, `password`, and password confirmation
+- After signup, the user must verify a 6-digit email OTP
+- After verification, login uses `username + password`
+- Supabase issues and refreshes JWT session cookies
+- Short-link redirect (`/{shortCode}`) is public, but create/edit/delete/list require login
+
+## Supabase setup
+
+1. Use your existing project (`wblinehakwnyeopajowz`).
+2. In **Authentication > Providers**, enable Email and disable Google/OAuth if not needed.
+3. In **Authentication > Settings**, keep **Confirm email** enabled.
+4. In email template for signup confirmation, include OTP token text such as:
+   - `Your URL Shortener code is {{ .Token }}`
+5. Run SQL from `sql/auth_setup.sql` in the Supabase SQL editor.
+
+This SQL adds:
+- `public.profiles` table with unique lowercased username/email
+- `user_id` ownership column on `public."URL"`
+- trigger to create profile from `auth.users`
+- row-level security policies for user ownership
 
 ## Getting Started
 
@@ -16,7 +39,11 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Important environment variables:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 

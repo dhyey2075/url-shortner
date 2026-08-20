@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { urlStorage } from '@/lib/url-storage';
+import {
+  createUserUrl,
+  getUserCodeByUrl,
+  hasCode,
+} from '@/lib/url-storage';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 // Generate a random short code
 function generateShortCode(): string {
@@ -23,6 +29,14 @@ function isValidUrl(url: string): boolean {
 
 export async function POST(request: NextRequest) {
   try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
     const { url } = body;
 
@@ -47,7 +61,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if URL already exists
-    const existingCode = await urlStorage.getByUrl(fullUrl);
+    const existingCode = await getUserCodeByUrl(supabase, user.id, fullUrl);
     if (existingCode) {
       return NextResponse.json({
         shortCode: existingCode,
@@ -60,10 +74,10 @@ export async function POST(request: NextRequest) {
     let shortCode: string;
     do {
       shortCode = generateShortCode();
-    } while (await urlStorage.hasCode(shortCode));
+    } while (await hasCode(supabaseAdmin, shortCode));
 
     // Store the mapping
-    await urlStorage.set(fullUrl, shortCode);
+    await createUserUrl(supabase, user.id, fullUrl, shortCode);
 
     return NextResponse.json({
       shortCode,

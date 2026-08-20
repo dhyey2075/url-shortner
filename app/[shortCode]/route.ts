@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { urlStorage } from '@/lib/url-storage';
+import { getPublicOriginalUrlByCode } from '@/lib/url-storage';
 
 const REMOVED_PAGE_HTML = (baseUrl: string) => `<!DOCTYPE html>
 <html lang="en">
@@ -70,7 +70,7 @@ export async function GET(
   try {
     const { shortCode } = await params;
 
-    const originalUrl = await urlStorage.getByCode(shortCode);
+    const originalUrl = await getPublicOriginalUrlByCode(shortCode);
 
     if (!originalUrl) {
       const baseUrl = request.nextUrl.origin;

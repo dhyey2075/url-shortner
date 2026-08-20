@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { urlStorage } from '@/lib/url-storage';
+import { updateUrlForUser } from '@/lib/url-storage';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 export async function POST(request: NextRequest) {
   try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
     const { oldShortCode, newShortCode, originalUrl } = body;
 
@@ -22,7 +31,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Update the short code
-    const success = await urlStorage.updateShortCode(oldShortCode, newShortCode, originalUrl);
+    const success = await updateUrlForUser(
+      supabase,
+      user.id,
+      oldShortCode,
+      newShortCode,
+      originalUrl
+    );
 
     if (!success) {
       return NextResponse.json(
