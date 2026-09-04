@@ -61,3 +61,43 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Docker (VPS via Traefik)
+
+Build on a machine with enough RAM, push to Docker Hub, pull on the VPS (same pattern as Droply).
+
+**`.env` on VPS:**
+
+```env
+DOMAIN=short.example.com
+DOCKERHUB_USER=your-dockerhub-user
+IMAGE_TAG=latest
+NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
+```
+
+Add `https://DOMAIN` to Supabase **Authentication > URL configuration** (site URL + redirect URLs).
+
+**Build and push (local):**
+
+```powershell
+$env:DOCKERHUB_USER = "your-dockerhub-user"
+$env:IMAGE_TAG = "latest"
+$env:NEXT_PUBLIC_SUPABASE_URL = "https://xxxx.supabase.co"
+$env:NEXT_PUBLIC_SUPABASE_ANON_KEY = "eyJ..."
+
+docker login
+docker compose build web
+docker compose push web
+```
+
+**Deploy on VPS** (Traefik must already be running — see `../droply/VPS_HELP.md`):
+
+```bash
+cd /var/www/url-shortner
+docker compose -f docker-compose.yml -f docker-compose.vps.yml pull
+docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d
+```
+
+Traefik routes `https://$DOMAIN` directly to the Next.js container on port 3000 (no Caddy layer).

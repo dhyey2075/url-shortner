@@ -1,0 +1,27 @@
+# VPS: pull from Docker Hub, route via shared Traefik (no host ports).
+#   docker compose -f docker-compose.yml -f docker-compose.vps.yml pull
+#   docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d
+networks:
+  proxy:
+    external: true
+    name: proxy
+
+services:
+  web:
+    build: !reset null
+    image: ${DOCKERHUB_USER}/url-shortner:${IMAGE_TAG:-latest}
+    pull_policy: always
+    ports: !reset []
+    expose:
+      - "3000"
+    networks:
+      - default
+      - proxy
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.routers.urlshortner.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.urlshortner.entrypoints=websecure
+      - traefik.http.routers.urlshortner.tls=true
+      - traefik.http.routers.urlshortner.tls.certresolver=le
+      - traefik.http.services.urlshortner.loadbalancer.server.port=3000
